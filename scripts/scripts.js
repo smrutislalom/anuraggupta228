@@ -1,6 +1,7 @@
 import {
   sampleRUM,
   buildBlock,
+  createOptimizedPicture as libCreateOptimizedPicture,
   loadHeader,
   loadFooter,
   decorateButtons,
@@ -14,7 +15,6 @@ import {
 } from './aem.js';
 
 const LCP_BLOCKS = []; // add your LCP blocks to the list
-let externalAssetHost = "delivery-p129624-e1269699";
 
 /**
  * Builds hero block and prepends to main in a new section.
@@ -83,70 +83,23 @@ function buildAutoBlocks(main) {
   }
 }
 
-/**
- * Decorates the main element.
- * @param {Element} main The main element
- */
-// eslint-disable-next-line import/prefer-default-export
-export function decorateMain(main) {
-  // decorate external images with explicit external image marker
-  decorateExternalImages(main, '//External Image//');
-
-  // decorate external images with implicit external image marker
-  decorateExternalImages(main);
-  
-  // hopefully forward compatible button decoration
-  decorateButtons(main);
-  decorateIcons(main);
-  buildAutoBlocks(main);
-  decorateSections(main);
-  decorateBlocks(main);
-}
-
-function decorateExternalImages(ele, deliveryMarker) {
-  const extImages = ele.querySelectorAll('a');
-  extImages.forEach((extImage) => {
-    if (isExternalImage(extImage, deliveryMarker)) {
-      const extImageSrc = createOptimizedSrc(extImage.getAttribute('href'));
-      const extPicture = createOptimizedPicture(extImageSrc);
-
-      /* copy query params from link to img */
-      const extImageUrl = new URL(extImageSrc);
-      const { searchParams } = extImageUrl;
-      extPicture.querySelectorAll('source, img').forEach((child) => {
-        if (child.tagName === 'SOURCE') {
-          const srcset = child.getAttribute('srcset');
-          if (srcset) {
-              const queryParams = appendQueryParams(new URL(srcset, extImageSrc), searchParams);
-              child.setAttribute('srcset', queryParams);  
-          }
-        } else if (child.tagName === 'IMG') {
-          const src = child.getAttribute('src');
-          if (src) {
-            const queryParams = appendQueryParams(new URL(src, extImageSrc), searchParams);
-            child.setAttribute('src', queryParams);
-          }
-        }
-      });
-      extImage.parentNode.replaceChild(extPicture, extImage);
-    }
+/*
+  * Appends query params to a URL
+  * @param {string} url The URL to append query params to
+  * @param {object} params The query params to append
+  * @returns {string} The URL with query params appended
+  * @private
+  * @example
+  * appendQueryParams('https://example.com', { foo: 'bar' });
+  * // returns 'https://example.com?foo=bar'
+*/
+function appendQueryParams(url, params) {
+  const { searchParams } = url;
+  params.forEach((value, key) => {
+    searchParams.set(key, value);
   });
-}
-
-function isExternalImage(element, externalImageMarker) {
-  // if the element is not an anchor, it's not an external image
-  if (element.tagName !== 'A') return false;
-
-  // if the element is an anchor with the external image marker as text content,
-  // it's an external image
-  if (element.textContent.trim() === externalImageMarker) {
-    return true;
-  }
-
-  // if the element is an anchor with the href as text content and the href has
-  // an image extension, it's an external image
-  const ext = getUrlExtension(element.getAttribute('href'));
-  return (ext && ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext.toLowerCase()));
+  url.search = searchParams.toString();
+  return url.toString();
 }
 
 /**
@@ -168,23 +121,20 @@ function getUrlExtension(url) {
   return url.split(/[#?]/)[0].split('.').pop().trim();
 }
 
-/*
-  * Appends query params to a URL
-  * @param {string} url The URL to append query params to
-  * @param {object} params The query params to append
-  * @returns {string} The URL with query params appended
-  * @private
-  * @example
-  * appendQueryParams('https://example.com', { foo: 'bar' });
-  * // returns 'https://example.com?foo=bar'
-*/
-function appendQueryParams(url, params) {
-  const { searchParams } = url;
-  params.forEach((value, key) => {
-    searchParams.set(key, value);
-  });
-  url.search = searchParams.toString();
-  return url.toString();
+function isExternalImage(element, externalImageMarker) {
+  // if the element is not an anchor, it's not an external image
+  if (element.tagName !== 'A') return false;
+
+  // if the element is an anchor with the external image marker as text content,
+  // it's an external image
+  if (element.textContent.trim() === externalImageMarker) {
+    return true;
+  }
+
+  // if the element is an anchor with the href as text content and the href has
+  // an image extension, it's an external image
+  const ext = getUrlExtension(element.getAttribute('href'));
+  return (ext && ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext.toLowerCase()));
 }
 
 export function createOptimizedPicture(src, alt = '', eager = false, breakpoints = [{ media: '(min-width: 600px)', width: '2000' }, { width: '750' }]) {
@@ -197,7 +147,7 @@ export function createOptimizedPicture(src, alt = '', eager = false, breakpoints
   const picture = document.createElement('picture');
   const { pathname } = url;
   const ext = pathname.substring(pathname.lastIndexOf('.') + 1);
-  
+
   // webp
   breakpoints.forEach((br) => {
     const source = document.createElement('source');
@@ -227,6 +177,56 @@ export function createOptimizedPicture(src, alt = '', eager = false, breakpoints
   });
 
   return picture;
+}
+
+function decorateExternalImages(ele, deliveryMarker) {
+  const extImages = ele.querySelectorAll('a');
+  extImages.forEach((extImage) => {
+    if (isExternalImage(extImage, deliveryMarker)) {
+      const extImageSrc = createOptimizedSrc(extImage.getAttribute('href'));
+      const extPicture = createOptimizedPicture(extImageSrc);
+
+      /* copy query params from link to img */
+      const extImageUrl = new URL(extImageSrc);
+      const { searchParams } = extImageUrl;
+      extPicture.querySelectorAll('source, img').forEach((child) => {
+        if (child.tagName === 'SOURCE') {
+          const srcset = child.getAttribute('srcset');
+          if (srcset) {
+            const queryParams = appendQueryParams(new URL(srcset, extImageSrc), searchParams);
+            child.setAttribute('srcset', queryParams);
+          }
+        } else if (child.tagName === 'IMG') {
+          const src = child.getAttribute('src');
+          if (src) {
+            const queryParams = appendQueryParams(new URL(src, extImageSrc), searchParams);
+            child.setAttribute('src', queryParams);
+          }
+        }
+      });
+      extImage.parentNode.replaceChild(extPicture, extImage);
+    }
+  });
+}
+
+/**
+ * Decorates the main element.
+ * @param {Element} main The main element
+ */
+// eslint-disable-next-line import/prefer-default-export
+export function decorateMain(main) {
+  // decorate external images with explicit external image marker
+  decorateExternalImages(main, '//External Image//');
+
+  // decorate external images with implicit external image marker
+  decorateExternalImages(main);
+
+  // hopefully forward compatible button decoration
+  decorateButtons(main);
+  decorateIcons(main);
+  buildAutoBlocks(main);
+  decorateSections(main);
+  decorateBlocks(main);
 }
 
 /**

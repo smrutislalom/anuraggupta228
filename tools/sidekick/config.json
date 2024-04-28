@@ -1,6 +1,13 @@
 {
-  "project": "franklin-asset-selector",
+  "project": "Franklin-Video",
   "plugins": [
+    {
+      "id": "library",
+      "title": "Library",
+      "environments": ["edit"],
+      "url": "/tools/sidekick/library.html",
+      "includePaths": ["**.docx**"]
+    },
     {
       "id": "asset-library",
       "title": "AEM Assets Library",

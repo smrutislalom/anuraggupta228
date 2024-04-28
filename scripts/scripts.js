@@ -32,6 +32,33 @@ function buildHeroBlock(main) {
 }
 
 /**
+ * Gets the cleaned up URL removing barriers to get picture src.
+ * @param {string} url The URL
+ * @returns {string} The normalised url
+ * @private
+ * @example
+ * get_url_extension('https://delivery-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/original/as/strawberry.jpg?preferwebp=true');
+ * // returns 'https://delivery-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/as/strawberry.jpg?preferwebp=true'
+ * get_url_extension('https://delivery-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/as/strawberry.jpg?accept-experimental=1&preferwebp=true');
+ * // returns 'https://delivery-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/as/strawberry.jpg?preferwebp=true'
+ * get_url_extension('https://delivery-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/as/strawberry.jpg?width=2048&height=2048&preferwebp=true');
+ * // returns 'https://delivery-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/as/strawberry.jpg?preferwebp=true'
+ * get_url_extension('https://author-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/as/strawberry.jpg?accept-experimental=1&width=2048&height=2048&preferwebp=true');
+ * // returns 'https://author-p129624-e1269699.adobeaemcloud.com/adobe/assets/urn:aaid:aem:a...492d81/as/strawberry.jpg?accept-experimental=1&width=2048&height=2048&preferwebp=true'
+ */
+export function createOptimizedSrc(src) {
+  const isDMOpenAPIUrl = /^(https?:\/\/delivery-p[0-9]+-e[0-9-cmstg]+\.adobeaemcloud\.com\/(.*))/gm.test(src);
+  const srcUrl = new URL(src);
+  if (isDMOpenAPIUrl) {
+    srcUrl.searchParams.delete('accept-experimental');
+    srcUrl.searchParams.delete('width');
+    srcUrl.searchParams.delete('height');
+    srcUrl.pathname = srcUrl.pathname.replace('/original/', '/');
+  }
+  return srcUrl.toString();
+}
+
+/**
  * load fonts.css and set a session storage flag
  */
 async function loadFonts() {
@@ -80,7 +107,7 @@ function decorateExternalImages(ele, deliveryMarker) {
   const extImages = ele.querySelectorAll('a');
   extImages.forEach((extImage) => {
     if (isExternalImage(extImage, deliveryMarker)) {
-      const extImageSrc = extImage.getAttribute('href');
+      const extImageSrc = createOptimizedSrc(extImage.getAttribute('href'));
       const extPicture = createOptimizedPicture(extImageSrc);
 
       /* copy query params from link to img */
@@ -91,21 +118,13 @@ function decorateExternalImages(ele, deliveryMarker) {
           const srcset = child.getAttribute('srcset');
           if (srcset) {
               const queryParams = appendQueryParams(new URL(srcset, extImageSrc), searchParams);
-              if (srcset.includes("/is/image/")) {
-                child.setAttribute('srcset', queryParams.replaceAll("%24", "$"));
-              } else {
-                child.setAttribute('srcset', queryParams);
-              }   
+              child.setAttribute('srcset', queryParams);  
           }
         } else if (child.tagName === 'IMG') {
           const src = child.getAttribute('src');
           if (src) {
             const queryParams = appendQueryParams(new URL(src, extImageSrc), searchParams);
-            if (src.includes("/is/image/")) {
-              child.setAttribute('src', queryParams.replaceAll("%24", "$"));
-            } else {
-              child.setAttribute('src', queryParams);
-            }  
+            child.setAttribute('src', queryParams);
           }
         }
       });
@@ -126,12 +145,8 @@ function isExternalImage(element, externalImageMarker) {
 
   // if the element is an anchor with the href as text content and the href has
   // an image extension, it's an external image
-  if ((element.textContent.trim() === element.getAttribute('href')) || element.getAttribute('href').includes(externalAssetHost)) {
-    const ext = getUrlExtension(element.getAttribute('href'));
-    return (ext && ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext.toLowerCase()) || element.getAttribute('href').includes('/is/image/'));
-  }
-
-  return false;
+  const ext = getUrlExtension(element.getAttribute('href'));
+  return (ext && ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext.toLowerCase()));
 }
 
 /**
